@@ -1,0 +1,16 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f3f4f6; /* Cor de fundo suave */
+}
+/* Estilização para barras de rolagem em navegadores baseados em WebKit */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-thumb {
+    background-color: #6366f1; /* Cor roxa da marca */
+    border-radius: 10px;
+}
+::-webkit-scrollbar-track {
+    background: #e5e7eb;
+}
