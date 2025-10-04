@@ -28,93 +28,260 @@
              <p id="user-id-display" class="text-xs text-gray-400 mt-2 hidden"></p>
         </header>
 
-        <!-- Dashboard Section -->
-        <section id="dashboard" class="mb-8">
-            <!-- Conteúdo do Dashboard será renderizado via JS -->
-            <div class="text-center text-gray-500 p-8 bg-white rounded-xl shadow-lg">Carregando dados...</div>
-        </section>
-
-        <!-- Forms Section -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            
-            <!-- Card 1: Entradas Mensais Essenciais -->
-            <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-indigo-500">
-                <h2 class="text-2xl font-semibold text-gray-800 mb-4">Entradas Mensais Essenciais</h2>
-                <form id="input-form">
-                    <div class="space-y-4">
-                        <!-- Salário -->
-                        <div>
-                            <label for="salario" class="block text-sm font-medium text-gray-700">Salário Líquido (R$)</label>
-                            <input type="number" step="0.01" id="salario" placeholder="Ex: 5000.00"
-                                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-3 border">
-                        </div>
-                        <!-- Investimentos -->
-                        <div>
-                            <label for="investimentos" class="block text-sm font-medium text-gray-700">Renda de Investimentos (R$)</label>
-                            <input type="number" step="0.01" id="investimentos" placeholder="Ex: 500.00"
-                                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-3 border">
-                        </div>
-                        <!-- Vale Refeição -->
-                        <div>
-                            <label for="vale-refeicao" class="block text-sm font-medium text-gray-700">Vale Refeição (R$)</label>
-                            <input type="number" step="0.01" id="vale-refeicao" placeholder="Ex: 450.00"
-                                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-3 border">
-                        </div>
-                    </div>
-                    
-                    <button type="submit"
-                        class="w-full mt-6 py-3 px-4 border border-transparent rounded-xl shadow-md text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 transform hover:scale-[1.01]">
-                        Salvar Entradas
-                    </button>
-                    <p id="input-message" class="mt-3 text-center text-sm font-medium hidden"></p>
-                </form>
+        <!-- Tab Navigation -->
+        <div class="mb-8">
+            <div class="flex border-b border-gray-200">
+                <button id="tab-resumo" class="tab-button active py-2 px-4 border-b-2 border-indigo-500 text-indigo-600 font-medium" onclick="switchTab('resumo')">Principal</button>
+                <button id="tab-gastos-gerais" class="tab-button py-2 px-4 text-gray-500 hover:text-gray-700" onclick="switchTab('gastos-gerais')">Gastos e Entradas</button>
+                <button id="tab-vale-alimentacao" class="tab-button py-2 px-4 text-gray-500 hover:text-gray-700" onclick="switchTab('vale-alimentacao')">Vale Alimentação</button>
+                <button id="tab-investimentos" class="tab-button py-2 px-4 text-gray-500 hover:text-gray-700" onclick="switchTab('investimentos')">Investimentos</button>
             </div>
+        </div>
 
-            <!-- Card 2: Registrar Nova Despesa -->
-            <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-500">
-                <h2 class="text-2xl font-semibold text-gray-800 mb-4">Lançar Nova Despesa</h2>
-                <form id="expense-form">
-                    <div class="space-y-4">
-                        <!-- Descrição -->
+        <!-- Tab Contents -->
+
+        <!-- Tab: Resumo -->
+        <div id="resumo-tab" class="tab-content">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="mb-8">
+                <!-- Conteúdo do Dashboard será renderizado via JS -->
+                <div class="text-center text-gray-500 p-8 bg-white rounded-xl shadow-lg">Carregando dados...</div>
+            </section>
+
+            <!-- Extrato Financeiro Section -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">Extrato Financeiro</h2>
+                
+                <!-- Filtros -->
+                <div class="bg-white p-4 rounded-xl shadow-lg mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
-                            <label for="expense-description" class="block text-sm font-medium text-gray-700">Descrição da Despesa</label>
-                            <input type="text" id="expense-description" placeholder="Ex: Conta de Luz" required
-                                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-red-500 focus:border-red-500 p-3 border">
+                            <label for="filter-type" class="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                            <select id="filter-type" class="w-full rounded-lg border-gray-300 shadow-sm p-2">
+                                <option value="all">Todos</option>
+                                <option value="income">Entradas</option>
+                                <option value="expense">Despesas</option>
+                            </select>
                         </div>
-                        <!-- Valor -->
                         <div>
-                            <label for="expense-value" class="block text-sm font-medium text-gray-700">Valor (R$)</label>
-                            <input type="number" step="0.01" id="expense-value" placeholder="Ex: 150.50" required
-                                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-red-500 focus:border-red-500 p-3 border">
-                        </div>
-                        <!-- Categoria -->
-                        <div>
-                            <label for="expense-category" class="block text-sm font-medium text-gray-700">Categoria</label>
-                            <select id="expense-category" required
-                                class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-red-500 focus:border-red-500 p-3 border bg-white">
+                            <label for="filter-category" class="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+                            <select id="filter-category" class="w-full rounded-lg border-gray-300 shadow-sm p-2">
+                                <option value="all">Todas</option>
                                 <!-- Opções populadas via JS -->
                             </select>
                         </div>
+                        <div>
+                            <label for="filter-payment" class="block text-sm font-medium text-gray-700 mb-1">Pagamento</label>
+                            <select id="filter-payment" class="w-full rounded-lg border-gray-300 shadow-sm p-2">
+                                <option value="all">Todos</option>
+                                <!-- Opções populadas via JS -->
+                            </select>
+                        </div>
+                        <div class="flex space-x-2">
+                            <input type="date" id="filter-from" class="rounded-lg border-gray-300 shadow-sm p-2 flex-1" placeholder="De">
+                            <input type="date" id="filter-to" class="rounded-lg border-gray-300 shadow-sm p-2 flex-1" placeholder="Até">
+                        </div>
                     </div>
-                    
-                    <button type="submit"
-                        class="w-full mt-6 py-3 px-4 border border-transparent rounded-xl shadow-md text-base font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-150 transform hover:scale-[1.01]">
-                        Registrar Despesa
-                    </button>
-                    <p id="expense-message" class="mt-3 text-center text-sm font-medium hidden"></p>
-                </form>
-            </div>
+                    <div class="mt-2 flex space-x-2">
+                        <input type="text" id="search-description" placeholder="Buscar por descrição..." class="flex-1 rounded-lg border-gray-300 shadow-sm p-2">
+                        <button onclick="applyFilters()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Filtrar</button>
+                        <button onclick="exportStatement()" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">Exportar CSV</button>
+                    </div>
+                </div>
 
+                <!-- Lista do Extrato -->
+                <div id="statement-list" class="bg-white rounded-xl shadow-lg overflow-hidden">
+                    <p class="text-center text-gray-500 py-8">Registre entradas e despesas para ver o extrato.</p>
+                </div>
+            </section>
         </div>
 
-        <!-- Transactions List Section -->
-        <section class="mb-8">
-            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Histórico de Despesas</h2>
-            <div id="transaction-list" class="space-y-3">
-                <!-- Lista de Transações será renderizada via JS -->
-                <p class="text-center text-gray-500 py-4 bg-white rounded-xl shadow-lg">Carregando histórico...</p>
+        <!-- Tab: Gastos Gerais -->
+        <div id="gastos-gerais-tab" class="tab-content hidden">
+            <!-- Forms Section -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+
+                <!-- Card 1: Entradas Mensais Essenciais -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-indigo-500">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Entradas Mensais Essenciais</h2>
+                    <form id="input-form">
+                        <div class="space-y-4">
+                            <!-- Salário -->
+                            <div>
+                                <label for="salario" class="block text-sm font-medium text-gray-700">Salário Líquido (R$)</label>
+                                <input type="number" step="0.01" id="salario" placeholder="Ex: 5000.00"
+                                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-3 border">
+                            </div>
+                            <!-- Investimentos -->
+                            <div>
+                                <label for="investimentos" class="block text-sm font-medium text-gray-700">Renda de Investimentos (R$)</label>
+                                <input type="number" step="0.01" id="investimentos" placeholder="Ex: 500.00"
+                                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-3 border">
+                            </div>
+                            <!-- Vale Refeição -->
+                            <div>
+                                <label for="vale-refeicao" class="block text-sm font-medium text-gray-700">Vale Refeição (R$)</label>
+                                <input type="number" step="0.01" id="vale-refeicao" placeholder="Ex: 450.00"
+                                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-3 border">
+                            </div>
+                        </div>
+
+                        <button type="submit"
+                            class="w-full mt-6 py-3 px-4 border border-transparent rounded-xl shadow-md text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 transform hover:scale-[1.01]">
+                            Salvar Entradas
+                        </button>
+                        <p id="input-message" class="mt-3 text-center text-sm font-medium hidden"></p>
+                    </form>
+                </div>
+
+                <!-- Card 2: Adicionar Entrada -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-green-500">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Adicionar Entrada</h2>
+                    <form id="income-form">
+                        <div class="space-y-4">
+                            <!-- Descrição -->
+                            <div>
+                                <label for="income-description" class="block text-sm font-medium text-gray-700">Descrição da Entrada</label>
+                                <input type="text" id="income-description" placeholder="Ex: Salário Mensal" required
+                                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-green-500 focus:border-green-500 p-3 border">
+                            </div>
+                            <!-- Valor -->
+                            <div>
+                                <label for="income-value" class="block text-sm font-medium text-gray-700">Valor (R$)</label>
+                                <input type="number" step="0.01" id="income-value" placeholder="Ex: 5000.00" required
+                                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-green-500 focus:border-green-500 p-3 border">
+                            </div>
+                            <!-- Categoria (opcional) -->
+                            <div>
+                                <label for="income-category" class="block text-sm font-medium text-gray-700">Categoria (opcional)</label>
+                                <select id="income-category"
+                                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-green-500 focus:border-green-500 p-3 border bg-white">
+                                    <option value="">Nenhuma</option>
+                                    <!-- Opções populadas via JS -->
+                                </select>
+                            </div>
+                            <!-- Método de Pagamento (opcional) -->
+                            <div>
+                                <label for="income-payment-method" class="block text-sm font-medium text-gray-700">Método (opcional)</label>
+                                <select id="income-payment-method"
+                                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-green-500 focus:border-green-500 p-3 border bg-white">
+                                    <option value="">Nenhum</option>
+                                    <!-- Opções populadas via JS -->
+                                </select>
+                            </div>
+                        </div>
+
+                        <button type="submit"
+                            class="w-full mt-6 py-3 px-4 border border-transparent rounded-xl shadow-md text-base font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-150 transform hover:scale-[1.01]">
+                            Registrar Entrada
+                        </button>
+                        <p id="income-message" class="mt-3 text-center text-sm font-medium hidden"></p>
+                    </form>
+                </div>
+
+                <!-- Card 3: Registrar Nova Despesa -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-red-500">
+                    <h2 class="text-2xl font-semibold text-gray-800 mb-4">Lançar Nova Despesa</h2>
+                    <form id="expense-form">
+                        <div class="space-y-4">
+                            <!-- Descrição -->
+                            <div>
+                                <label for="expense-description" class="block text-sm font-medium text-gray-700">Descrição da Despesa</label>
+                                <input type="text" id="expense-description" placeholder="Ex: Conta de Luz" required
+                                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-red-500 focus:border-red-500 p-3 border">
+                            </div>
+                            <!-- Valor -->
+                            <div>
+                                <label for="expense-value" class="block text-sm font-medium text-gray-700">Valor (R$)</label>
+                                <input type="number" step="0.01" id="expense-value" placeholder="Ex: 150.50" required
+                                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-red-500 focus:border-red-500 p-3 border">
+                            </div>
+                            <!-- Categoria -->
+                            <div>
+                                <label for="expense-category" class="block text-sm font-medium text-gray-700">Categoria</label>
+                                <select id="expense-category" required
+                                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-red-500 focus:border-red-500 p-3 border bg-white">
+                                    <!-- Opções populadas via JS -->
+                                </select>
+                            </div>
+                            <!-- Método de Pagamento -->
+                            <div>
+                                <label for="expense-payment-method" class="block text-sm font-medium text-gray-700">Método de Pagamento</label>
+                                <select id="expense-payment-method" required
+                                    class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:ring-red-500 focus:border-red-500 p-3 border bg-white">
+                                    <!-- Opções populadas via JS -->
+                                </select>
+                            </div>
+                        </div>
+
+                        <button type="submit"
+                            class="w-full mt-6 py-3 px-4 border border-transparent rounded-xl shadow-md text-base font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-150 transform hover:scale-[1.01]">
+                            Registrar Despesa
+                        </button>
+                        <p id="expense-message" class="mt-3 text-center text-sm font-medium hidden"></p>
+                    </form>
+                </div>
+
             </div>
-        </section>
+
+            <!-- Transactions List Section -->
+            <section class="mb-8">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">Histórico de Despesas Gerais</h2>
+                <div id="transaction-list" class="space-y-3">
+                    <!-- Lista de Transações será renderizada via JS -->
+                    <p class="text-center text-gray-500 py-4 bg-white rounded-xl shadow-lg">Carregando histórico...</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- Tab: Vale Alimentação -->
+        <div id="vale-alimentacao-tab" class="tab-content hidden">
+            <section class="mb-8">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">Controle de Vale Alimentação</h2>
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <p class="text-lg text-gray-600 mb-4">Saldo Atual do Vale Alimentação: <span id="vale-balance" class="font-bold text-indigo-600"></span></p>
+                    <!-- Adicionar entrada de vale se necessário -->
+                </div>
+            </section>
+            <section class="mb-8">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">Despesas com Vale Alimentação</h2>
+                <div id="transaction-list-vale" class="space-y-3">
+                    <p class="text-center text-gray-500 py-4 bg-white rounded-xl shadow-lg">Carregando histórico...</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- Tab: Investimentos -->
+        <div id="investimentos-tab" class="tab-content hidden">
+            <section class="mb-8">
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">Rastreamento de Investimentos</h2>
+
+                <!-- Formulário para Adicionar Investimento -->
+                <div class="bg-white p-6 rounded-xl shadow-lg mb-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Adicionar Investimento</h3>
+                    <form id="investment-form" class="space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="investment-description" class="block text-sm font-medium text-gray-700">Descrição</label>
+                                <input type="text" id="investment-description" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="Ex: Ações da Empresa X" required>
+                            </div>
+                            <div>
+                                <label for="investment-value" class="block text-sm font-medium text-gray-700">Valor (R$)</label>
+                                <input type="number" id="investment-value" step="0.01" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="0.00" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition duration-150">Adicionar Investimento</button>
+                    </form>
+                    <div id="investment-message" class="mt-4 text-sm hidden"></div>
+                </div>
+
+                <!-- Lista de Investimentos -->
+                <div class="bg-white p-6 rounded-xl shadow-lg">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-4">Investimentos Registrados</h3>
+                    <div id="investment-list"></div>
+                </div>
+            </section>
+        </div>
 
     </div>
 </body>

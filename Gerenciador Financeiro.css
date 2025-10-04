@@ -14,3 +14,62 @@ body {
 ::-webkit-scrollbar-track {
     background: #e5e7eb;
 }
+
+/* Estilos para botões de aba */
+.tab-button {
+    transition: all 0.2s ease;
+}
+.tab-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+.tab-button.active {
+    background-color: #e0f2fe;
+    border-radius: 0.5rem 0.5rem 0 0;
+}
+
+/* Estilos para barra de filtros responsiva */
+#filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+#filters > div {
+    flex: 1 1 auto;
+    min-width: 150px;
+}
+#filters input[type="text"], #filters select, #filters input[type="date"] {
+    width: 100%;
+}
+
+/* Estilos para itens do extrato */
+.statement-item {
+    /* Alternating rows handled in JS */
+}
+.statement-item:nth-child(even) {
+    background-color: #f9fafb;
+}
+.statement-item .running-balance {
+    font-weight: bold;
+    color: #374151;
+}
+
+/* Responsividade para mobile */
+@media (max-width: 768px) {
+    #filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    #filters > div {
+        min-width: auto;
+    }
+    .statement-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .statement-item .text-right {
+        text-align: left;
+        margin-top: 0.5rem;
+    }
+}

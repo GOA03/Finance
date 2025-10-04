@@ -5,7 +5,9 @@ let isAuthReady = true;
 const STATE = {
     monthlyInputs: { salary: 0, investments: 0, mealVoucher: 0 },
     transactions: [],
+    investments: [],
     showValues: true, // Novo estado para controlar a visibilidade dos valores
+    filters: { type: 'all', category: 'all', payment: 'all', from: '', to: '', search: '' }, // Filtros para extrato
 };
 
 const CATEGORIES = [
@@ -16,6 +18,13 @@ const CATEGORIES = [
     { key: 'lazer', name: 'Lazer', color: 'bg-yellow-500' },
     { key: 'educacao', name: 'Educação', color: 'bg-purple-500' },
     { key: 'outros', name: 'Outros', color: 'bg-gray-500' },
+];
+
+const PAYMENT_METHODS = [
+    { key: 'dinheiro', name: 'Dinheiro' },
+    { key: 'vale-alimentacao', name: 'Vale Alimentação' },
+    { key: 'cartao', name: 'Cartão' },
+    { key: 'outros', name: 'Outros' },
 ];
 
 // Função de mapeamento de cores para D3 (precisa de cores hex)
@@ -55,46 +64,137 @@ function loadFromLocalStorage() {
     if (transactions) {
         STATE.transactions = JSON.parse(transactions).map(t => ({
             ...t,
-            timestamp: new Date(t.timestamp)
+            type: t.type || 'expense', // Default para transações antigas
+            timestamp: new Date(t.timestamp),
+            paymentMethod: t.paymentMethod || 'dinheiro',
+            category: t.category || 'outros'
         }));
+    }
+
+    const investments = localStorage.getItem('investments');
+    if (investments) {
+        STATE.investments = JSON.parse(investments).map(i => ({
+            ...i,
+            timestamp: new Date(i.timestamp)
+        }));
+    }
+
+    // Auto-criar transações iniciais de income se monthlyInputs >0 e não há incomes
+    const hasIncomes = STATE.transactions.some(t => t.type === 'income');
+    if (!hasIncomes && (STATE.monthlyInputs.salary > 0 || STATE.monthlyInputs.investments > 0 || STATE.monthlyInputs.mealVoucher > 0)) {
+        const now = new Date();
+        if (STATE.monthlyInputs.salary > 0) {
+            addTransaction('Entrada Mensal: Salário', STATE.monthlyInputs.salary, '', '', 'income');
+        }
+        if (STATE.monthlyInputs.investments > 0) {
+            addTransaction('Entrada Mensal: Investimentos', STATE.monthlyInputs.investments, '', '', 'income');
+        }
+        if (STATE.monthlyInputs.mealVoucher > 0) {
+            addTransaction('Entrada Mensal: Vale Refeição', STATE.monthlyInputs.mealVoucher, '', 'vale-alimentacao', 'income');
+        }
     }
 
     renderDashboard();
     renderInputForms();
     renderTransactionList();
+    renderValeBalance();
+    renderInvestmentsList();
+    populateFilterOptions();
+    if (document.getElementById('resumo-tab').classList.contains('hidden') === false) {
+        renderStatement();
+    }
 }
 
 function saveMonthlyInputs(salary, investments, mealVoucher) {
+    const oldSalary = STATE.monthlyInputs.salary;
+    const oldInvestments = STATE.monthlyInputs.investments;
+    const oldMealVoucher = STATE.monthlyInputs.mealVoucher;
+
     if (salary !== '') STATE.monthlyInputs.salary = parseFloat(salary) || 0;
     if (investments !== '') STATE.monthlyInputs.investments = parseFloat(investments) || 0;
     if (mealVoucher !== '') STATE.monthlyInputs.mealVoucher = parseFloat(mealVoucher) || 0;
+
     localStorage.setItem('monthlyInputs', JSON.stringify(STATE.monthlyInputs));
+
+    // Atualizar transações iniciais se valores mudaram
+    if (oldSalary !== STATE.monthlyInputs.salary) {
+        updateMonthlyTransaction('Entrada Mensal: Salário', STATE.monthlyInputs.salary);
+    }
+    if (oldInvestments !== STATE.monthlyInputs.investments) {
+        updateMonthlyTransaction('Entrada Mensal: Investimentos', STATE.monthlyInputs.investments);
+    }
+    if (oldMealVoucher !== STATE.monthlyInputs.mealVoucher) {
+        updateMonthlyTransaction('Entrada Mensal: Vale Refeição', STATE.monthlyInputs.mealVoucher);
+    }
+
     renderDashboard();
     renderInputForms();
     console.log("Entradas mensais atualizadas com sucesso.");
 }
 
-function addTransaction(description, value, category) {
+function updateMonthlyTransaction(description, value) {
+    const existing = STATE.transactions.find(t => t.description === description && t.type === 'income');
+    if (existing) {
+        existing.value = value;
+    } else if (value > 0) {
+        addTransaction(description, value, '', '', 'income');
+    }
+    localStorage.setItem('transactions', JSON.stringify(STATE.transactions));
+    renderDashboard();
+    renderStatement();
+}
+
+function addTransaction(description, value, category, paymentMethod, type = 'expense') {
     const transaction = {
         id: Date.now().toString(),
         description: description,
         value: parseFloat(value) || 0,
-        category: category,
+        category: category || 'outros',
+        paymentMethod: paymentMethod || 'dinheiro',
+        type: type,
         timestamp: new Date(),
     };
     STATE.transactions.unshift(transaction); // Adiciona no início para ordem desc
     localStorage.setItem('transactions', JSON.stringify(STATE.transactions));
     renderDashboard();
     renderTransactionList();
+    renderValeBalance();
+    renderStatement();
     console.log("Transação adicionada com sucesso.");
 }
 
+function addIncome(description, value, category = '', paymentMethod = '') {
+    addTransaction(description, value, category, paymentMethod, 'income');
+}
+
 function deleteTransaction(id) {
+    if (!confirm('Tem certeza que deseja excluir esta transação?')) return;
     STATE.transactions = STATE.transactions.filter(t => t.id !== id);
     localStorage.setItem('transactions', JSON.stringify(STATE.transactions));
     renderDashboard();
     renderTransactionList();
+    renderStatement();
     console.log("Transação excluída com sucesso:", id);
+}
+
+function addInvestment(description, value) {
+    const investment = {
+        id: Date.now().toString(),
+        description: description,
+        value: parseFloat(value) || 0,
+        timestamp: new Date(),
+    };
+    STATE.investments.unshift(investment); // Adiciona no início para ordem desc
+    localStorage.setItem('investments', JSON.stringify(STATE.investments));
+    renderInvestmentsList();
+    console.log("Investimento adicionado com sucesso.");
+}
+
+function deleteInvestment(id) {
+    STATE.investments = STATE.investments.filter(i => i.id !== id);
+    localStorage.setItem('investments', JSON.stringify(STATE.investments));
+    renderInvestmentsList();
+    console.log("Investimento excluído com sucesso:", id);
 }
 
 // --- Funções de Toggle de Valores ---
@@ -124,12 +224,13 @@ function updateToggleIcon() {
 // --- Funções de Renderização ---
 
 function calculateBalance() {
-    const totalIncome = STATE.monthlyInputs.salary + STATE.monthlyInputs.investments + STATE.monthlyInputs.mealVoucher;
-    const totalExpenses = STATE.transactions.reduce((sum, t) => sum + t.value, 0);
+    const totalIncome = STATE.transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.value, 0) +
+                        STATE.investments.reduce((sum, i) => sum + i.value, 0);
+    const totalExpenses = STATE.transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.value, 0);
     const balance = totalIncome - totalExpenses;
     
-    // Calcula o resumo por categoria
-    const categorySummary = STATE.transactions.reduce((acc, t) => {
+    // Calcula o resumo por categoria para despesas
+    const categorySummary = STATE.transactions.filter(t => t.type === 'expense').reduce((acc, t) => {
         acc[t.category] = (acc[t.category] || 0) + t.value;
         return acc;
     }, {});
@@ -307,56 +408,389 @@ function renderInputForms() {
     document.getElementById('vale-refeicao').value = inputs.mealVoucher || '';
 
     // Renderiza as categorias no select do formulário de despesa
-    const categorySelect = document.getElementById('expense-category');
-    if (categorySelect.options.length === 0) {
+    const expenseCategorySelect = document.getElementById('expense-category');
+    if (expenseCategorySelect && expenseCategorySelect.options.length === 0) {
          CATEGORIES.forEach(cat => {
             const option = document.createElement('option');
             option.value = cat.key;
             option.textContent = cat.name;
-            categorySelect.appendChild(option);
+            expenseCategorySelect.appendChild(option);
+        });
+    }
+
+    // Renderiza os métodos de pagamento no select do formulário de despesa
+    const expensePaymentSelect = document.getElementById('expense-payment-method');
+    if (expensePaymentSelect && expensePaymentSelect.options.length === 0) {
+         PAYMENT_METHODS.forEach(method => {
+            const option = document.createElement('option');
+            option.value = method.key;
+            option.textContent = method.name;
+            expensePaymentSelect.appendChild(option);
+        });
+    }
+
+    // Para income form (opcional)
+    const incomeCategorySelect = document.getElementById('income-category');
+    if (incomeCategorySelect && incomeCategorySelect.options.length <= 1) {
+        const noneOption = incomeCategorySelect.querySelector('option[value=""]');
+        CATEGORIES.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.key;
+            option.textContent = cat.name;
+            incomeCategorySelect.appendChild(option);
+        });
+    }
+
+    const incomePaymentSelect = document.getElementById('income-payment-method');
+    if (incomePaymentSelect && incomePaymentSelect.options.length <= 1) {
+        const noneOption = incomePaymentSelect.querySelector('option[value=""]');
+        PAYMENT_METHODS.forEach(method => {
+            const option = document.createElement('option');
+            option.value = method.key;
+            option.textContent = method.name;
+            incomePaymentSelect.appendChild(option);
         });
     }
 }
 
-function renderTransactionList() {
-    const listEl = document.getElementById('transaction-list');
-    listEl.innerHTML = ''; // Limpa a lista antes de renderizar
+function populateFilterOptions() {
+    const filterCategory = document.getElementById('filter-category');
+    if (filterCategory && filterCategory.options.length <= 1) {
+        const allOption = filterCategory.querySelector('option[value="all"]');
+        CATEGORIES.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.key;
+            option.textContent = cat.name;
+            filterCategory.appendChild(option);
+        });
+    }
 
-    if (STATE.transactions.length === 0) {
-        listEl.innerHTML = '<p class="text-center text-gray-500 py-4">Nenhuma despesa registrada ainda.</p>';
+    const filterPayment = document.getElementById('filter-payment');
+    if (filterPayment && filterPayment.options.length <= 1) {
+        const allOption = filterPayment.querySelector('option[value="all"]');
+        PAYMENT_METHODS.forEach(method => {
+            const option = document.createElement('option');
+            option.value = method.key;
+            option.textContent = method.name;
+            filterPayment.appendChild(option);
+        });
+    }
+}
+
+function renderValeBalance() {
+    const valeTransactions = STATE.transactions.filter(t => t.paymentMethod === 'vale-alimentacao');
+    const totalValeSpent = valeTransactions.reduce((sum, t) => sum + t.value, 0);
+    const valeBalance = STATE.monthlyInputs.mealVoucher - totalValeSpent;
+
+    const valeBalanceEl = document.getElementById('vale-balance');
+    if (valeBalanceEl) {
+        valeBalanceEl.textContent = formatCurrency(valeBalance);
+    }
+}
+
+function renderTransactionList(filterFn = null) {
+    const listEl = document.getElementById('transaction-list');
+    if (listEl) {
+        listEl.innerHTML = ''; // Limpa a lista antes de renderizar
+
+        let transactionsToShow = STATE.transactions.filter(t => t.type === 'expense'); // Apenas despesas para esta lista
+        if (filterFn) {
+            transactionsToShow = transactionsToShow.filter(filterFn);
+        }
+
+        if (transactionsToShow.length === 0) {
+            listEl.innerHTML = '<p class="text-center text-gray-500 py-4">Nenhuma despesa registrada ainda.</p>';
+            return;
+        }
+
+        const items = transactionsToShow.map(t => {
+            const category = CATEGORIES.find(c => c.key === t.category);
+            const colorClass = category ? category.color : 'bg-gray-500';
+            const categoryName = category ? category.name : 'Desconhecida';
+            const paymentMethod = PAYMENT_METHODS.find(m => m.key === t.paymentMethod);
+            const paymentMethodName = paymentMethod ? paymentMethod.name : 'Desconhecido';
+            const dateString = t.timestamp instanceof Date && !isNaN(t.timestamp) ? t.timestamp.toLocaleDateString('pt-BR') : 'Sem data';
+
+            return `
+                <li class="flex justify-between items-center p-4 bg-white rounded-lg shadow-sm border-l-4 ${colorClass.replace('bg-', 'border-')}">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-gray-800 font-semibold truncate">${t.description}</p>
+                        <p class="text-sm text-gray-500">
+                            <span class="font-medium ${colorClass.replace('bg-', 'text-')}">${categoryName}</span>
+                            <span class="ml-2 text-xs">(${dateString})</span>
+                            <span class="ml-2 text-xs bg-gray-100 px-2 py-1 rounded">${paymentMethodName}</span>
+                        </p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <span class="text-lg font-bold text-red-600">${formatCurrency(t.value)}</span>
+                        <button onclick="deleteTransaction('${t.id}')" class="text-gray-400 hover:text-red-500 p-1 rounded-full transition duration-150" aria-label="Excluir transação">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 10-2 0v6a1 1 0 102 0V8z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </li>
+            `;
+        }).join('');
+
+        listEl.innerHTML = `<ul class="space-y-3">${items}</ul>`;
+    }
+
+    // Renderizar lista específica para Vale Alimentação (apenas despesas)
+    const valeListEl = document.getElementById('transaction-list-vale');
+    if (valeListEl) {
+        valeListEl.innerHTML = ''; // Limpa a lista antes de renderizar
+
+        const valeTransactions = STATE.transactions.filter(t => t.type === 'expense' && t.paymentMethod === 'vale-alimentacao');
+
+        if (valeTransactions.length === 0) {
+            valeListEl.innerHTML = '<p class="text-center text-gray-500 py-4">Nenhuma despesa com Vale Alimentação registrada ainda.</p>';
+            return;
+        }
+
+        const valeItems = valeTransactions.map(t => {
+            const category = CATEGORIES.find(c => c.key === t.category);
+            const colorClass = category ? category.color : 'bg-gray-500';
+            const categoryName = category ? category.name : 'Desconhecida';
+            const dateString = t.timestamp instanceof Date && !isNaN(t.timestamp) ? t.timestamp.toLocaleDateString('pt-BR') : 'Sem data';
+
+            return `
+                <li class="flex justify-between items-center p-4 bg-white rounded-lg shadow-sm border-l-4 ${colorClass.replace('bg-', 'border-')}">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-gray-800 font-semibold truncate">${t.description}</p>
+                        <p class="text-sm text-gray-500">
+                            <span class="font-medium ${colorClass.replace('bg-', 'text-')}">${categoryName}</span>
+                            <span class="ml-2 text-xs">(${dateString})</span>
+                        </p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <span class="text-lg font-bold text-red-600">${formatCurrency(t.value)}</span>
+                        <button onclick="deleteTransaction('${t.id}')" class="text-gray-400 hover:text-red-500 p-1 rounded-full transition duration-150" aria-label="Excluir transação">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 10-2 0v6a1 1 0 102 0V8z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </li>
+            `;
+        }).join('');
+
+        valeListEl.innerHTML = `<ul class="space-y-3">${valeItems}</ul>`;
+    }
+}
+
+function renderStatement() {
+    const listEl = document.getElementById('statement-list');
+    if (!listEl) return;
+
+    // Combinar transações e investimentos
+    let allItems = [
+        ...STATE.transactions.map(t => ({ ...t, isInvestment: false })),
+        ...STATE.investments.map(i => ({ ...i, type: 'income', isInvestment: true, category: '', paymentMethod: '' }))
+    ];
+
+    // Aplicar filtros
+    let filteredItems = allItems.filter(item => {
+        if (STATE.filters.type !== 'all' && item.type !== STATE.filters.type) return false;
+        if (STATE.filters.category !== 'all' && item.category !== STATE.filters.category) return false;
+        if (STATE.filters.payment !== 'all' && item.paymentMethod !== STATE.filters.payment) return false;
+        if (STATE.filters.search && !item.description.toLowerCase().includes(STATE.filters.search.toLowerCase())) return false;
+        if (STATE.filters.from) {
+            const fromDate = new Date(STATE.filters.from);
+            if (item.timestamp < fromDate) return false;
+        }
+        if (STATE.filters.to) {
+            const toDate = new Date(STATE.filters.to);
+            toDate.setHours(23, 59, 59, 999);
+            if (item.timestamp > toDate) return false;
+        }
+        return true;
+    });
+
+    if (filteredItems.length === 0) {
+        listEl.innerHTML = '<p class="text-center text-gray-500 py-8">Nenhuma transação encontrada com os filtros aplicados.</p>';
         return;
     }
 
-    const items = STATE.transactions.map(t => {
-        const category = CATEGORIES.find(c => c.key === t.category);
-        const colorClass = category ? category.color : 'bg-gray-500';
-        const categoryName = category ? category.name : 'Desconhecida';
-        // Garante que t.timestamp é uma data válida antes de chamar toLocaleDateString
-        const dateString = t.timestamp instanceof Date && !isNaN(t.timestamp) ? t.timestamp.toLocaleDateString('pt-BR') : 'Sem data';
+    // Ordenar por timestamp desc (mais recente primeiro)
+    filteredItems.sort((a, b) => b.timestamp - a.timestamp);
 
+    // Calcular running balance: Para display desc, calcular do total atual para trás
+    const { balance: currentBalance } = calculateBalance();
+    let runningBalance = currentBalance;
+    filteredItems.forEach(item => {
+        const signedValue = item.type === 'income' ? item.value : -item.value;
+        item.runningBalance = runningBalance;
+        runningBalance -= signedValue; // Subtrai o valor da transação para o anterior
+    });
+
+    // Inverter para display desc com running balance correto (agora runningBalance é o balance ANTES da transação? Wait, adjust.
+    // Actually, for statement: running balance is AFTER the transaction.
+    // So, better: sort asc, compute cumulative forward, then reverse array.
+    filteredItems.sort((a, b) => a.timestamp - b.timestamp); // Asc
+    let cumulative = 0;
+    filteredItems.forEach(item => {
+        const signedValue = item.type === 'income' ? item.value : -item.value;
+        cumulative += signedValue;
+        item.runningBalance = cumulative;
+    });
+    filteredItems.reverse(); // Now desc, with runningBalance as after each (from oldest)
+
+    const items = filteredItems.map((item, index) => {
+        const category = CATEGORIES.find(c => c.key === item.category);
+        const colorClass = item.type === 'income' ? 'bg-green-500' : (category ? category.color : 'bg-gray-500');
+        const categoryName = item.type === 'income' ? (category ? category.name : 'Entrada') : (category ? category.name : 'Desconhecida');
+        const paymentMethod = PAYMENT_METHODS.find(m => m.key === item.paymentMethod);
+        const paymentMethodName = paymentMethod ? paymentMethod.name : '';
+        const dateString = item.timestamp instanceof Date && !isNaN(item.timestamp) ? item.timestamp.toLocaleDateString('pt-BR') : 'Sem data';
+        const valueSign = item.type === 'income' ? '+' : '-';
+        const valueColor = item.type === 'income' ? 'text-green-600' : 'text-red-600';
+        const borderColor = colorClass.replace('bg-', 'border-');
 
         return `
-            <li class="flex justify-between items-center p-4 bg-white rounded-lg shadow-sm border-l-4 ${colorClass.replace('bg-', 'border-')}">
-                <div class="flex-1 min-w-0">
-                    <p class="text-gray-800 font-semibold truncate">${t.description}</p>
-                    <p class="text-sm text-gray-500">
-                        <span class="font-medium ${colorClass.replace('bg-', 'text-')}">${categoryName}</span>
-                        <span class="ml-2 text-xs">(${dateString})</span>
-                    </p>
-                </div>
-                <div class="flex items-center space-x-3">
-                    <span class="text-lg font-bold text-red-600">${formatCurrency(t.value)}</span>
-                    <button onclick="deleteTransaction('${t.id}')" class="text-gray-400 hover:text-red-500 p-1 rounded-full transition duration-150" aria-label="Excluir transação">
+            <div class="p-4 border-b border-gray-100 ${index % 2 === 0 ? 'bg-gray-50' : ''}">
+                <div class="flex justify-between items-center">
+                    <div class="flex-1">
+                        <p class="text-gray-800 font-semibold">${item.description}</p>
+                        <p class="text-sm text-gray-500">
+                            <span class="font-medium ${colorClass.replace('bg-', 'text-')}">${categoryName}</span>
+                            ${paymentMethodName ? `<span class="ml-2 text-xs bg-gray-100 px-2 py-1 rounded">${paymentMethodName}</span>` : ''}
+                            <span class="ml-2 text-xs">(${dateString})</span>
+                            ${item.isInvestment ? '<span class="ml-2 text-xs bg-blue-100 px-2 py-1 rounded text-blue-800">Investimento</span>' : ''}
+                        </p>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-lg font-bold ${valueColor}">${valueSign}${formatCurrency(item.value)}</span>
+                        <p class="text-sm text-gray-600 mt-1">Saldo: ${formatCurrency(item.runningBalance)}</p>
+                    </div>
+                    ${!item.isInvestment ? `
+                    <button onclick="deleteTransaction('${item.id}')" class="text-gray-400 hover:text-red-500 p-1 rounded-full transition duration-150 ml-3" aria-label="Excluir">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                             <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 10-2 0v6a1 1 0 102 0V8z" clip-rule="evenodd" />
                         </svg>
                     </button>
+                    ` : ''}
                 </div>
-            </li>
+            </div>
         `;
     }).join('');
 
-    listEl.innerHTML = `<ul class="space-y-3">${items}</ul>`;
+    listEl.innerHTML = `
+        <div class="overflow-x-auto">
+            <div class="min-w-full">
+                ${items}
+            </div>
+        </div>
+        <div class="p-4 bg-gray-100 font-bold text-right">
+            Saldo Final: ${formatCurrency(calculateBalance().balance)}
+        </div>
+    `;
+}
+
+function applyFilters() {
+    STATE.filters.type = document.getElementById('filter-type')?.value || 'all';
+    STATE.filters.category = document.getElementById('filter-category')?.value || 'all';
+    STATE.filters.payment = document.getElementById('filter-payment')?.value || 'all';
+    STATE.filters.from = document.getElementById('filter-from')?.value || '';
+    STATE.filters.to = document.getElementById('filter-to')?.value || '';
+    STATE.filters.search = document.getElementById('search-description')?.value || '';
+
+    // Listener para search real-time
+    document.getElementById('search-description')?.addEventListener('input', applyFilters);
+
+    renderStatement();
+}
+
+function exportStatement() {
+    applyFilters(); // Apply current filters
+    // Reuse the filtered logic from renderStatement
+    let allItems = [
+        ...STATE.transactions.map(t => ({ ...t, isInvestment: false })),
+        ...STATE.investments.map(i => ({ ...i, type: 'income', isInvestment: true, category: '', paymentMethod: '' }))
+    ];
+    let filtered = allItems.filter(item => {
+        // Same filter logic as renderStatement
+        if (STATE.filters.type !== 'all' && item.type !== STATE.filters.type) return false;
+        if (STATE.filters.category !== 'all' && item.category !== STATE.filters.category) return false;
+        if (STATE.filters.payment !== 'all' && item.paymentMethod !== STATE.filters.payment) return false;
+        if (STATE.filters.search && !item.description.toLowerCase().includes(STATE.filters.search.toLowerCase())) return false;
+        if (STATE.filters.from) {
+            const fromDate = new Date(STATE.filters.from);
+            if (item.timestamp < fromDate) return false;
+        }
+        if (STATE.filters.to) {
+            const toDate = new Date(STATE.filters.to);
+            toDate.setHours(23, 59, 59, 999);
+            if (item.timestamp > toDate) return false;
+        }
+        return true;
+    });
+
+    // Compute running balance like in renderStatement
+    filtered.sort((a, b) => a.timestamp - b.timestamp); // Asc
+    let cumulative = 0;
+    filtered.forEach(item => {
+        const signedValue = item.type === 'income' ? item.value : -item.value;
+        cumulative += signedValue;
+        item.runningBalance = cumulative;
+    });
+    filtered.sort((a, b) => b.timestamp - a.timestamp); // Desc for output
+
+    let csv = 'Data,Descrição,Tipo,Valor,Categoria,Pagamento,Saldo\n';
+    filtered.forEach(item => {
+        const date = item.timestamp.toLocaleDateString('pt-BR');
+        const type = item.type;
+        const value = item.type === 'income' ? `+${item.value}` : `-${item.value}`;
+        const category = item.category || '';
+        const payment = item.paymentMethod || '';
+        const balance = formatCurrency(item.runningBalance || 0);
+        csv += `"${date}","${item.description}","${type}","${value}","${category}","${payment}","${balance}"\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'extrato-financeiro.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+function renderInvestmentsList() {
+    const listEl = document.getElementById('investment-list');
+    if (listEl) {
+        listEl.innerHTML = ''; // Limpa a lista antes de renderizar
+
+        if (STATE.investments.length === 0) {
+            listEl.innerHTML = '<p class="text-center text-gray-500 py-4">Nenhum investimento registrado ainda.</p>';
+            return;
+        }
+
+        const items = STATE.investments.map(i => {
+            const dateString = i.timestamp instanceof Date && !isNaN(i.timestamp) ? i.timestamp.toLocaleDateString('pt-BR') : 'Sem data';
+
+            return `
+                <li class="flex justify-between items-center p-4 bg-white rounded-lg shadow-sm border-l-4 border-green-500">
+                    <div class="flex-1 min-w-0">
+                        <p class="text-gray-800 font-semibold truncate">${i.description}</p>
+                        <p class="text-sm text-gray-500">
+                            <span class="text-xs">(${dateString})</span>
+                        </p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <span class="text-lg font-bold text-green-600">${formatCurrency(i.value)}</span>
+                        <button onclick="deleteInvestment('${i.id}')" class="text-gray-400 hover:text-red-500 p-1 rounded-full transition duration-150" aria-label="Excluir investimento">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 10-2 0v6a1 1 0 102 0V8z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </li>
+            `;
+        }).join('');
+
+        listEl.innerHTML = `<ul class="space-y-3">${items}</ul>`;
+    }
 }
 
 // --- Event Handlers (Funções que interagem com o DOM) ---
@@ -400,25 +834,28 @@ function handleExpenseFormSubmit(event) {
     const descriptionEl = document.getElementById('expense-description');
     const valueEl = document.getElementById('expense-value');
     const categoryEl = document.getElementById('expense-category');
+    const paymentMethodEl = document.getElementById('expense-payment-method');
 
     const description = descriptionEl.value.trim();
     const value = valueEl.value;
     const category = categoryEl.value;
+    const paymentMethod = paymentMethodEl.value;
 
     // Validação
-    if (!description || !value || !category || isNaN(parseFloat(value)) || parseFloat(value) <= 0) {
+    if (!description || !value || !category || !paymentMethod || isNaN(parseFloat(value)) || parseFloat(value) <= 0) {
         document.getElementById('expense-message').textContent = 'Preencha todos os campos com valores válidos.';
         document.getElementById('expense-message').classList.remove('hidden', 'text-green-500');
         document.getElementById('expense-message').classList.add('text-red-500');
         return;
     }
     
-    addTransaction(description, value, category);
+    addTransaction(description, value, category, paymentMethod);
 
     // Limpa formulário
     descriptionEl.value = '';
     valueEl.value = '';
     categoryEl.value = CATEGORIES[0].key; // Reseta para a primeira categoria
+    paymentMethodEl.value = PAYMENT_METHODS[0].key; // Reseta para o primeiro método
 
     document.getElementById('expense-message').textContent = 'Despesa registrada com sucesso!';
     document.getElementById('expense-message').classList.remove('hidden', 'text-red-500');
@@ -426,9 +863,125 @@ function handleExpenseFormSubmit(event) {
     setTimeout(() => document.getElementById('expense-message').classList.add('hidden'), 3000);
 }
 
+function handleIncomeFormSubmit(event) {
+    event.preventDefault();
+    
+    const descriptionEl = document.getElementById('income-description');
+    const valueEl = document.getElementById('income-value');
+    const categoryEl = document.getElementById('income-category');
+    const paymentMethodEl = document.getElementById('income-payment-method');
+
+    const description = descriptionEl.value.trim();
+    const value = valueEl.value;
+    const category = categoryEl.value || '';
+    const paymentMethod = paymentMethodEl.value || '';
+
+    // Validação
+    if (!description || !value || isNaN(parseFloat(value)) || parseFloat(value) <= 0) {
+        document.getElementById('income-message').textContent = 'Preencha descrição e valor válidos.';
+        document.getElementById('income-message').classList.remove('hidden', 'text-green-500');
+        document.getElementById('income-message').classList.add('text-red-500');
+        return;
+    }
+    
+    addIncome(description, value, category, paymentMethod);
+
+    // Limpa formulário
+    descriptionEl.value = '';
+    valueEl.value = '';
+    categoryEl.value = '';
+    paymentMethodEl.value = '';
+
+    document.getElementById('income-message').textContent = 'Entrada registrada com sucesso!';
+    document.getElementById('income-message').classList.remove('hidden', 'text-red-500');
+    document.getElementById('income-message').classList.add('text-green-500');
+    setTimeout(() => document.getElementById('income-message').classList.add('hidden'), 3000);
+}
+
+function handleInvestmentFormSubmit(event) {
+    event.preventDefault();
+
+    const descriptionEl = document.getElementById('investment-description');
+    const valueEl = document.getElementById('investment-value');
+
+    const description = descriptionEl.value.trim();
+    const value = valueEl.value;
+
+    // Validação
+    if (!description || !value || isNaN(parseFloat(value)) || parseFloat(value) <= 0) {
+        document.getElementById('investment-message').textContent = 'Preencha todos os campos com valores válidos.';
+        document.getElementById('investment-message').classList.remove('hidden', 'text-green-500');
+        document.getElementById('investment-message').classList.add('text-red-500');
+        return;
+    }
+
+    addInvestment(description, value);
+
+    // Limpa formulário
+    descriptionEl.value = '';
+    valueEl.value = '';
+
+    document.getElementById('investment-message').textContent = 'Investimento registrado com sucesso!';
+    document.getElementById('investment-message').classList.remove('hidden', 'text-red-500');
+    document.getElementById('investment-message').classList.add('text-green-500');
+    setTimeout(() => document.getElementById('investment-message').classList.add('hidden'), 3000);
+}
+
+// --- Função de Navegação de Abas ---
+
+function switchTab(tabName) {
+    // Remove a classe 'active' de todos os botões de aba
+    const tabButtons = document.querySelectorAll('.tab-button');
+    tabButtons.forEach(btn => btn.classList.remove('active'));
+
+    // Adiciona a classe 'active' ao botão clicado
+    const activeButton = document.getElementById(`tab-${tabName}`);
+    if (activeButton) {
+        activeButton.classList.add('active');
+    }
+
+    // Esconde todas as abas
+    const tabContents = document.querySelectorAll('.tab-content');
+    tabContents.forEach(content => content.classList.add('hidden'));
+
+    // Mostra a aba selecionada
+    const activeTab = document.getElementById(`${tabName}-tab`);
+    if (activeTab) {
+        activeTab.classList.remove('hidden');
+    }
+
+    // Re-renderiza conteúdo específico por aba
+    if (tabName === 'resumo') {
+        renderDashboard();
+        renderStatement();
+    } else if (tabName === 'gastos-gerais') {
+        applyTransactionSearch();
+    } else if (tabName === 'vale-alimentacao') {
+        applyValeSearch();
+        renderValeBalance();
+    } else if (tabName === 'investimentos') {
+        renderInvestmentsList();
+    }
+}
+
 // Expondo as funções globais
 window.deleteTransaction = deleteTransaction;
 window.toggleValueVisibility = toggleValueVisibility;
+window.switchTab = switchTab;
+
+// --- Funções de Busca ---
+
+function applyTransactionSearch() {
+    const searchValue = document.getElementById('transaction-search')?.value.toLowerCase() || '';
+    const filterFn = searchValue ? (t) => t.description.toLowerCase().includes(searchValue) : null;
+    renderTransactionList(filterFn);
+}
+
+function applyValeSearch() {
+    const searchValue = document.getElementById('vale-search')?.value.toLowerCase() || '';
+    const filterFn = searchValue ? (t) => t.description.toLowerCase().includes(searchValue) : null;
+    renderTransactionList(filterFn); // For vale, it's the same list but filtered
+}
 
 // --- Inicialização ---
 
@@ -436,7 +989,13 @@ window.onload = () => {
     loadFromLocalStorage();
     document.getElementById('input-form').addEventListener('submit', handleInputFormSubmit);
     document.getElementById('expense-form').addEventListener('submit', handleExpenseFormSubmit);
+    document.getElementById('income-form').addEventListener('submit', handleIncomeFormSubmit);
+    document.getElementById('investment-form').addEventListener('submit', handleInvestmentFormSubmit);
     document.getElementById('toggle-values-btn').addEventListener('click', toggleValueVisibility); // Listener do botão de segurança
+
+    // Listeners para busca
+    document.getElementById('transaction-search')?.addEventListener('input', applyTransactionSearch);
+    document.getElementById('vale-search')?.addEventListener('input', applyValeSearch);
 
     updateToggleIcon(); // Define o ícone inicial
     renderInputForms();
