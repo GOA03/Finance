@@ -22,10 +22,14 @@ body {
 .tab-button:hover {
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    border-radius: 0.5rem 0.5rem 0 0;
 }
 .tab-button.active {
     background-color: #e0f2fe;
     border-radius: 0.5rem 0.5rem 0 0;
+    border-bottom: 2px solid #6366f1;
+    color: #4f46e5;
+    font-weight: 500;
 }
 
 /* Estilos para barra de filtros responsiva */
