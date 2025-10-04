@@ -1,6 +1,9 @@
-// Configurações e Variáveis Globais para armazenamento local
+// Configurações e Variáveis Globais para IndexedDB
 let userId = 'local-user';
 let isAuthReady = true;
+
+const DB_NAME = 'GerenciadorFinanceiroDB';
+const DB_VERSION = 1;
 
 const STATE = {
     monthlyInputs: { salary: 0, investments: 0, mealVoucher: 0 },
@@ -52,46 +55,117 @@ const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 };
 
-// --- Funções de Armazenamento Local ---
+// --- Funções de Armazenamento IndexedDB ---
 
-function loadFromLocalStorage() {
-    const monthlyInputs = localStorage.getItem('monthlyInputs');
-    if (monthlyInputs) {
-        STATE.monthlyInputs = JSON.parse(monthlyInputs);
-    }
+function openDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains('data')) {
+                db.createObjectStore('data');
+            }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
 
-    const transactions = localStorage.getItem('transactions');
-    if (transactions) {
-        STATE.transactions = JSON.parse(transactions).map(t => ({
-            ...t,
-            type: t.type || 'expense', // Default para transações antigas
-            timestamp: new Date(t.timestamp),
-            paymentMethod: t.paymentMethod || 'dinheiro',
-            category: t.category || 'outros'
-        }));
-    }
+async function loadFromIndexedDB() {
+    const db = await openDB();
+    const store = db.transaction('data').objectStore('data');
 
-    const investments = localStorage.getItem('investments');
-    if (investments) {
-        STATE.investments = JSON.parse(investments).map(i => ({
-            ...i,
-            timestamp: new Date(i.timestamp)
-        }));
-    }
+    // Load monthlyInputs
+    const monthlyInputsRequest = store.get('monthlyInputs');
+    monthlyInputsRequest.onsuccess = () => {
+        if (monthlyInputsRequest.result) {
+            STATE.monthlyInputs = monthlyInputsRequest.result;
+        } else {
+            // Try to migrate from localStorage
+            const ls = localStorage.getItem('monthlyInputs');
+            if (ls) {
+                STATE.monthlyInputs = JSON.parse(ls);
+                saveToDB('monthlyInputs', STATE.monthlyInputs);
+            }
+        }
+    };
+
+    // Load transactions
+    const transactionsRequest = store.get('transactions');
+    transactionsRequest.onsuccess = () => {
+        if (transactionsRequest.result) {
+            STATE.transactions = transactionsRequest.result.map(t => ({
+                ...t,
+                type: t.type || 'expense',
+                timestamp: new Date(t.timestamp),
+                paymentMethod: t.paymentMethod || 'dinheiro',
+                category: t.category || 'outros'
+            }));
+        } else {
+            // Migrate
+            const ls = localStorage.getItem('transactions');
+            if (ls) {
+                STATE.transactions = JSON.parse(ls).map(t => ({
+                    ...t,
+                    type: t.type || 'expense',
+                    timestamp: new Date(t.timestamp),
+                    paymentMethod: t.paymentMethod || 'dinheiro',
+                    category: t.category || 'outros'
+                }));
+                saveToDB('transactions', STATE.transactions);
+            }
+        }
+    };
+
+    // Load investments
+    const investmentsRequest = store.get('investments');
+    investmentsRequest.onsuccess = () => {
+        if (investmentsRequest.result) {
+            STATE.investments = investmentsRequest.result.map(i => ({
+                ...i,
+                timestamp: new Date(i.timestamp)
+            }));
+        } else {
+            // Migrate
+            const ls = localStorage.getItem('investments');
+            if (ls) {
+                STATE.investments = JSON.parse(ls).map(i => ({
+                    ...i,
+                    timestamp: new Date(i.timestamp)
+                }));
+                saveToDB('investments', STATE.investments);
+            }
+        }
+    };
+
+    // Wait for all loads
+    await new Promise(resolve => {
+        let count = 0;
+        const check = () => {
+            count++;
+            if (count === 3) resolve();
+        };
+        monthlyInputsRequest.addEventListener('success', check);
+        transactionsRequest.addEventListener('success', check);
+        investmentsRequest.addEventListener('success', check);
+    });
+
+    db.close();
 
     // Auto-criar transações iniciais de income se monthlyInputs >0 e não há incomes
     const hasIncomes = STATE.transactions.some(t => t.type === 'income');
     if (!hasIncomes && (STATE.monthlyInputs.salary > 0 || STATE.monthlyInputs.investments > 0 || STATE.monthlyInputs.mealVoucher > 0)) {
-        const now = new Date();
-        if (STATE.monthlyInputs.salary > 0) {
-            addTransaction('Entrada Mensal: Salário', STATE.monthlyInputs.salary, '', '', 'income');
-        }
-        if (STATE.monthlyInputs.investments > 0) {
-            addTransaction('Entrada Mensal: Investimentos', STATE.monthlyInputs.investments, '', '', 'income');
-        }
-        if (STATE.monthlyInputs.mealVoucher > 0) {
-            addTransaction('Entrada Mensal: Vale Refeição', STATE.monthlyInputs.mealVoucher, '', 'vale-alimentacao', 'income');
-        }
+        (async () => {
+            if (STATE.monthlyInputs.salary > 0) {
+                await addTransaction('Entrada Mensal: Salário', STATE.monthlyInputs.salary, '', '', 'income');
+            }
+            if (STATE.monthlyInputs.investments > 0) {
+                await addTransaction('Entrada Mensal: Investimentos', STATE.monthlyInputs.investments, '', '', 'income');
+            }
+            if (STATE.monthlyInputs.mealVoucher > 0) {
+                await addTransaction('Entrada Mensal: Vale Refeição', STATE.monthlyInputs.mealVoucher, '', 'vale-alimentacao', 'income');
+            }
+        })();
     }
 
     renderDashboard();
@@ -105,7 +179,14 @@ function loadFromLocalStorage() {
     }
 }
 
-function saveMonthlyInputs(salary, investments, mealVoucher) {
+async function saveToDB(key, value) {
+    const db = await openDB();
+    const store = db.transaction('data', 'readwrite').objectStore('data');
+    store.put(value, key);
+    db.close();
+}
+
+async function saveMonthlyInputs(salary, investments, mealVoucher) {
     const oldSalary = STATE.monthlyInputs.salary;
     const oldInvestments = STATE.monthlyInputs.investments;
     const oldMealVoucher = STATE.monthlyInputs.mealVoucher;
@@ -114,17 +195,17 @@ function saveMonthlyInputs(salary, investments, mealVoucher) {
     if (investments !== '') STATE.monthlyInputs.investments = parseFloat(investments) || 0;
     if (mealVoucher !== '') STATE.monthlyInputs.mealVoucher = parseFloat(mealVoucher) || 0;
 
-    localStorage.setItem('monthlyInputs', JSON.stringify(STATE.monthlyInputs));
+    await saveToDB('monthlyInputs', STATE.monthlyInputs);
 
     // Atualizar transações iniciais se valores mudaram
     if (oldSalary !== STATE.monthlyInputs.salary) {
-        updateMonthlyTransaction('Entrada Mensal: Salário', STATE.monthlyInputs.salary);
+        await updateMonthlyTransaction('Entrada Mensal: Salário', STATE.monthlyInputs.salary);
     }
     if (oldInvestments !== STATE.monthlyInputs.investments) {
-        updateMonthlyTransaction('Entrada Mensal: Investimentos', STATE.monthlyInputs.investments);
+        await updateMonthlyTransaction('Entrada Mensal: Investimentos', STATE.monthlyInputs.investments);
     }
     if (oldMealVoucher !== STATE.monthlyInputs.mealVoucher) {
-        updateMonthlyTransaction('Entrada Mensal: Vale Refeição', STATE.monthlyInputs.mealVoucher);
+        await updateMonthlyTransaction('Entrada Mensal: Vale Refeição', STATE.monthlyInputs.mealVoucher);
     }
 
     renderDashboard();
@@ -132,19 +213,19 @@ function saveMonthlyInputs(salary, investments, mealVoucher) {
     console.log("Entradas mensais atualizadas com sucesso.");
 }
 
-function updateMonthlyTransaction(description, value) {
+async function updateMonthlyTransaction(description, value) {
     const existing = STATE.transactions.find(t => t.description === description && t.type === 'income');
     if (existing) {
         existing.value = value;
     } else if (value > 0) {
-        addTransaction(description, value, '', '', 'income');
+        await addTransaction(description, value, '', '', 'income');
     }
-    localStorage.setItem('transactions', JSON.stringify(STATE.transactions));
+    await saveToDB('transactions', STATE.transactions);
     renderDashboard();
     renderStatement();
 }
 
-function addTransaction(description, value, category, paymentMethod, type = 'expense') {
+async function addTransaction(description, value, category, paymentMethod, type = 'expense') {
     const transaction = {
         id: Date.now().toString(),
         description: description,
@@ -155,7 +236,7 @@ function addTransaction(description, value, category, paymentMethod, type = 'exp
         timestamp: new Date(),
     };
     STATE.transactions.unshift(transaction); // Adiciona no início para ordem desc
-    localStorage.setItem('transactions', JSON.stringify(STATE.transactions));
+    await saveToDB('transactions', STATE.transactions);
     renderDashboard();
     renderTransactionList();
     renderValeBalance();
@@ -167,17 +248,17 @@ function addIncome(description, value, category = '', paymentMethod = '') {
     addTransaction(description, value, category, paymentMethod, 'income');
 }
 
-function deleteTransaction(id) {
+async function deleteTransaction(id) {
     if (!confirm('Tem certeza que deseja excluir esta transação?')) return;
     STATE.transactions = STATE.transactions.filter(t => t.id !== id);
-    localStorage.setItem('transactions', JSON.stringify(STATE.transactions));
+    await saveToDB('transactions', STATE.transactions);
     renderDashboard();
     renderTransactionList();
     renderStatement();
     console.log("Transação excluída com sucesso:", id);
 }
 
-function addInvestment(description, value) {
+async function addInvestment(description, value) {
     const investment = {
         id: Date.now().toString(),
         description: description,
@@ -185,14 +266,14 @@ function addInvestment(description, value) {
         timestamp: new Date(),
     };
     STATE.investments.unshift(investment); // Adiciona no início para ordem desc
-    localStorage.setItem('investments', JSON.stringify(STATE.investments));
+    await saveToDB('investments', STATE.investments);
     renderInvestmentsList();
     console.log("Investimento adicionado com sucesso.");
 }
 
-function deleteInvestment(id) {
+async function deleteInvestment(id) {
     STATE.investments = STATE.investments.filter(i => i.id !== id);
-    localStorage.setItem('investments', JSON.stringify(STATE.investments));
+    await saveToDB('investments', STATE.investments);
     renderInvestmentsList();
     console.log("Investimento excluído com sucesso:", id);
 }
@@ -986,7 +1067,7 @@ function applyValeSearch() {
 // --- Inicialização ---
 
 window.onload = () => {
-    loadFromLocalStorage();
+    loadFromIndexedDB();
     document.getElementById('input-form').addEventListener('submit', handleInputFormSubmit);
     document.getElementById('expense-form').addEventListener('submit', handleExpenseFormSubmit);
     document.getElementById('income-form').addEventListener('submit', handleIncomeFormSubmit);
